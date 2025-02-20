@@ -21,6 +21,7 @@ import sys
 import numpy as np
 from tqdm import tqdm
 from numba import njit
+from qrisp.core import config_parser
 
 from qrisp.circuit import (
     QuantumCircuit,
@@ -45,20 +46,24 @@ def run(qc, shots, token="", iqs=None, insert_reset=True):
     if shots == 0:
         return {}
     
-    
-    progress_bar = tqdm(
-        desc=f"Simulating {len(qc.qubits)} qubits..",
-        bar_format="{desc} |{bar}| [{percentage:3.0f}%]",
-        ncols=85,
-        leave=False,
-        delay=0.1,
-        position=0,
-        smoothing=1,
-        file=sys.stdout
-    )
+    config, _ = config_parser.load_config()
+    display_progress_bars = config['SIMULATOR'].getboolean('progress_bars')
+
+    if display_progress_bars:
+        progress_bar = tqdm(
+            desc=f"Simulating {len(qc.qubits)} qubits..",
+            bar_format="{desc} |{bar}| [{percentage:3.0f}%]",
+            ncols=85,
+            leave=False,
+            delay=0.1,
+            position=0,
+            smoothing=1,
+            file=sys.stdout
+        )
     
     LINE_CLEAR = "\x1b[2K"
-    progress_bar.display()
+    if display_progress_bars:
+        progress_bar.display()
 
     # This command enables fast appending. Fast appending means that the .append method
     # of the QuantumCircuit class checks much less validity conditions and is also less
@@ -114,11 +119,13 @@ def run(qc, shots, token="", iqs=None, insert_reset=True):
         for i in range(len(qc.data)):
             total_flops += 2 ** qc.data[i].op.num_qubits
         
-        progress_bar.total = total_flops
+        if display_progress_bars:
+            progress_bar.total = total_flops
         for i in range(len(qc.data)):
             # Set alias for the instruction of this operation
             instr = qc.data[i]
-            progress_bar.update(2**instr.op.num_qubits)
+            if display_progress_bars:
+                progress_bar.update(2**instr.op.num_qubits)
             # Gather the indices of the qubits from the circuits (i.e. integers instead
             # of the identifier strings)
             qubit_indices = [qc.qubits.index(qb) for qb in instr.qubits]
@@ -156,8 +163,9 @@ def run(qc, shots, token="", iqs=None, insert_reset=True):
             outcome_list, cl_prob = iqs.multi_measure(mes_qubit_indices[::-1], return_res_states = False)
             mes_qubit_indices = []
 
-        progress_bar.close()
-        print("\r" + 85*" ", end=LINE_CLEAR + "\r")
+        if display_progress_bars:
+            progress_bar.close()
+            print("\r" + 85*" ", end=LINE_CLEAR + "\r")
 
         # Prepare result dictionary
         # The iqs object contains the outcome bitstrings in the attribute .outcome_list
